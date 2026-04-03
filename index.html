@@ -1,117 +1,29 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>BRVM Analyst - Aliou</title>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 1100px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
-        
-        .controls { margin-bottom: 25px; display: flex; gap: 15px; flex-direction: column; }
-        select { padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 16px; width: 100%; cursor: pointer; }
-        
-        .signal-card { padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-left: 8px solid #bdc3c7; background: #f9f9f9; }
-        .signal-badge { padding: 10px 20px; border-radius: 50px; font-weight: bold; text-transform: uppercase; color: white; }
-        
-        #chart { height: 500px; width: 100%; border: 1px solid #eee; border-radius: 8px; overflow: hidden; background: white; }
-        .footer { text-align: center; margin-top: 30px; font-size: 0.9em; color: #7f8c8d; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h1>📈 Mon Terminal BRVM</h1>
-    
-    <div class="controls">
-        <label for="stockSelect">Choisir une société :</label>
-        <select id="stockSelect" onchange="updateChart()">
-            <option>Chargement des analyses en cours...</option>
-        </select>
+<div id="signalCard" class="signal-card" style="border-left: 10px solid #bdc3c7; padding: 20px; background: #fff; margin-bottom: 20px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+    <div>
+        <h2 id="stockName">Sélectionnez une valeur</h2>
+        <p><strong>RSI :</strong> <span id="rsiVal">--</span> | <strong>Bollinger :</strong> <span id="bbVal">--</span></p>
+        <p><strong>Figure détectée :</strong> <span id="figVal" style="color: #3498db; font-weight: bold;">--</span></p>
     </div>
-
-    <div id="signalCard" class="signal-card">
-        <div>
-            <h2 id="stockName" style="margin:0">Sélectionnez une valeur</h2>
-            <p id="rsiText" style="margin:5px 0 0 0">Indicateur RSI : --</p>
-        </div>
-        <div id="signalBadge" class="signal-badge" style="background:#bdc3c7">EN ATTENTE</div>
-    </div>
-
-    <div id="chart"></div>
-
-    <div class="footer">
-        Dernière mise à jour : <span id="updateTime">--</span> | Créé par Aliou
-    </div>
+    <div id="decisionBadge" style="padding: 15px 25px; border-radius: 5px; color: white; font-weight: bold; font-size: 1.2em;">ANALYSES...</div>
 </div>
 
 <script>
-    let fullData = {};
+// Mets à jour la fonction updateChart() dans ton index.html
+function updateChart() {
+    const sym = document.getElementById('stockSelect').value;
+    const stock = fullData[sym];
     
-    // Configuration du graphique TradingView (Lightweight Charts)
-    const chartOptions = {
-        width: document.getElementById('chart').clientWidth,
-        height: 500,
-        layout: { backgroundColor: '#ffffff', textColor: '#333' },
-        grid: { vertLines: { color: '#f0f3fa' }, horzLines: { color: '#f0f3fa' } },
-        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        priceScale: { borderColor: '#dfe2e9' },
-        timeScale: { borderColor: '#dfe2e9', timeVisible: true, secondsVisible: false },
-    };
+    document.getElementById('stockName').innerText = stock.name;
+    document.getElementById('rsiVal').innerText = stock.rsi;
+    document.getElementById('bbVal').innerText = stock.bb_low + " - " + stock.bb_up;
+    document.getElementById('figVal').innerText = stock.figure;
+    
+    const badge = document.getElementById('decisionBadge');
+    badge.innerText = stock.decision;
+    badge.style.background = stock.color;
+    document.getElementById('signalCard').style.borderLeftColor = stock.color;
 
-    const chart = LightweightCharts.createChart(document.getElementById('chart'), chartOptions);
-    const candleSeries = chart.addCandlestickSeries({
-        upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
-        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-    });
-
-    // On récupère les données générées par le script Python
-    fetch('data.json')
-        .then(response => response.json())
-        .then(data => {
-            fullData = data;
-            const select = document.getElementById('stockSelect');
-            select.innerHTML = "";
-            
-            for(let key in data) {
-                let opt = document.createElement('option');
-                opt.value = key;
-                opt.innerText = data[key].name;
-                select.appendChild(opt);
-            }
-            
-            document.getElementById('updateTime').innerText = new Date().toLocaleString();
-            updateChart(); // Afficher le premier par défaut
-        })
-        .catch(err => {
-            console.error("Erreur de chargement des données:", err);
-            document.getElementById('stockName').innerText = "Erreur : Lancez d'abord le script Python !";
-        });
-
-    function updateChart() {
-        const sym = document.getElementById('stockSelect').value;
-        const stock = fullData[sym];
-        
-        // Mise à jour des textes
-        document.getElementById('stockName').innerText = stock.name;
-        document.getElementById('rsiText').innerText = "RSI (14) : " + stock.rsi;
-        
-        const badge = document.getElementById('signalBadge');
-        badge.innerText = stock.signal;
-        badge.style.background = stock.color;
-        document.getElementById('signalCard').style.borderLeftColor = stock.color;
-
-        // Mise à jour des bougies
-        candleSeries.setData(stock.candles);
-        chart.timeScale().fitContent();
-    }
-
-    // Gérer le redimensionnement de la fenêtre
-    window.addEventListener('resize', () => {
-        chart.resize(document.getElementById('chart').clientWidth, 500);
-    });
+    candleSeries.setData(stock.candles);
+    chart.timeScale().fitContent();
+}
 </script>
-
-</body>
-</html>
