@@ -1,29 +1,115 @@
-<div id="signalCard" class="signal-card" style="border-left: 10px solid #bdc3c7; padding: 20px; background: #fff; margin-bottom: 20px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-    <div>
-        <h2 id="stockName">Sélectionnez une valeur</h2>
-        <p><strong>RSI :</strong> <span id="rsiVal">--</span> | <strong>Bollinger :</strong> <span id="bbVal">--</span></p>
-        <p><strong>Figure détectée :</strong> <span id="figVal" style="color: #3498db; font-weight: bold;">--</span></p>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>BRVM TRADING — ALIOU</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root { --dark-bg: #121826; --card-bg: #1f2937; --text-main: #ffffff; --accent: #3b82f6; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--dark-bg); color: var(--text-main); margin: 0; padding: 20px; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #374151; padding-bottom: 10px; margin-bottom: 20px; }
+        .logo { font-weight: bold; color: #2ecc71; font-size: 1.2em; }
+        
+        .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { background: #374151; border: none; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        .tab-btn.active { background: var(--accent); }
+
+        .dashboard-grid { display: grid; grid-template-columns: 300px 1fr 300px; gap: 20px; }
+        .side-panel { background: var(--card-bg); border-radius: 8px; padding: 15px; height: 600px; overflow-y: auto; }
+        .main-chart-area { background: white; border-radius: 8px; padding: 10px; position: relative; }
+        
+        .stock-item { padding: 10px; border-bottom: 1px solid #374151; cursor: pointer; display: flex; justify-content: space-between; }
+        .stock-item:hover { background: #374151; }
+        .price-up { color: #26a69a; } .price-down { color: #ef5350; }
+
+        .indicator-card { background: var(--card-bg); border-radius: 8px; padding: 15px; }
+        .signal-badge { padding: 5px 10px; border-radius: 4px; font-size: 0.8em; font-weight: bold; text-align: center; margin-top: 10px; }
+        
+        #chart { width: 100%; height: 500px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="logo">BRVM TRADING — ALIOU</div>
+    <div id="last-update" style="font-size: 0.8em; color: #9ca3af;">Mise à jour : --:--</div>
+</div>
+
+<div class="nav-tabs">
+    <button class="tab-btn active">Graphiques</button>
+    <button class="tab-btn">Signaux</button>
+</div>
+
+<div class="dashboard-grid">
+    <div class="side-panel" id="stockList">
+        <p style="text-align:center;">Chargement...</p>
     </div>
-    <div id="decisionBadge" style="padding: 15px 25px; border-radius: 5px; color: white; font-weight: bold; font-size: 1.2em;">ANALYSES...</div>
+
+    <div class="main-chart-area">
+        <h3 id="activeTitle" style="color: #121826; margin: 5px 0 15px 0;">Sélectionnez une action</h3>
+        <div id="chart"></div>
+    </div>
+
+    <div class="side-panel">
+        <div class="indicator-card">
+            <h4>Analyse Technique</h4>
+            <div id="signalContainer">
+                <p>RSI (14): <span id="rsiVal" style="float:right;">--</span></p>
+                <p>Bollinger: <span id="bbVal" style="float:right; font-size: 0.8em;">--</span></p>
+                <hr style="border: 0.5px solid #374151;">
+                <p>Pattern: <br><strong id="patternVal" style="color: var(--accent);">--</strong></p>
+                <div id="decisionBadge" class="signal-badge" style="background: #6b7280;">NEUTRE</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
-// Mets à jour la fonction updateChart() dans ton index.html
-function updateChart() {
-    const sym = document.getElementById('stockSelect').value;
-    const stock = fullData[sym];
-    
-    document.getElementById('stockName').innerText = stock.name;
-    document.getElementById('rsiVal').innerText = stock.rsi;
-    document.getElementById('bbVal').innerText = stock.bb_low + " - " + stock.bb_up;
-    document.getElementById('figVal').innerText = stock.figure;
-    
-    const badge = document.getElementById('decisionBadge');
-    badge.innerText = stock.decision;
-    badge.style.background = stock.color;
-    document.getElementById('signalCard').style.borderLeftColor = stock.color;
+    let currentData = {};
+    const chartOptions = {
+        layout: { backgroundColor: '#ffffff', textColor: '#333' },
+        grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        priceScale: { borderColor: '#cccccc' },
+        timeScale: { borderColor: '#cccccc' },
+    };
 
-    candleSeries.setData(stock.candles);
-    chart.timeScale().fitContent();
-}
+    const chart = LightweightCharts.createChart(document.getElementById('chart'), chartOptions);
+    const candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+    });
+
+    fetch('data.json').then(r => r.json()).then(data => {
+        currentData = data;
+        const list = document.getElementById('stockList');
+        list.innerHTML = "";
+        
+        for (let key in data) {
+            let div = document.createElement('div');
+            div.className = "stock-item";
+            div.innerHTML = `<span>${key.split('.')[0]}</span> <span class="price-up">En ligne</span>`;
+            div.onclick = () => loadStock(key);
+            list.appendChild(div);
+        }
+        loadStock(Object.keys(data)[0]);
+    });
+
+    function loadStock(key) {
+        const s = currentData[key];
+        document.getElementById('activeTitle').innerText = s.name;
+        document.getElementById('rsiVal').innerText = s.rsi;
+        document.getElementById('bbVal').innerText = s.bb_low + " - " + s.bb_up;
+        document.getElementById('patternVal').innerText = s.figure;
+        
+        const badge = document.getElementById('decisionBadge');
+        badge.innerText = s.decision;
+        badge.style.background = s.color;
+
+        candleSeries.setData(s.candles);
+        chart.timeScale().fitContent();
+    }
 </script>
+</body>
+</html>
