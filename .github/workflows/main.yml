@@ -1,34 +1,21 @@
 name: Mise a jour BRVM Aliou
-
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 18 * * 1-5'
-
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Recuperer le code
-        uses: actions/checkout@v4
-
-      - name: Installer Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      - name: Installer les bibliotheques
-        run: pip install requests pandas
-
-      - name: Lancer l'analyse
-        run: python update_data.py
-
-      - name: Sauvegarder les changements
-        run: |
+      - run: pip install requests pandas
+      - run: python update_data.py
+      - run: |
           git config --global user.name 'Aliou-Bot'
           git config --global user.email 'bot@github.com'
           git add data.json
-          git commit -m "MAJ automatique" || echo "Rien a commit"
+          git commit -m "MAJ" || exit 0
           git push
