@@ -20,9 +20,7 @@ jobs:
           python-version: '3.10'
 
       - name: Installer les bibliotheques
-        run: |
-          pip install requests pandas
-          pip install pandas-ta --no-dependencies
+        run: pip install requests pandas
 
       - name: Lancer l'analyse
         run: python update_data.py
