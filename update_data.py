@@ -16,13 +16,6 @@ SYMBOLS = {
 
 GUID = "Bs6Jz65CExmMWlmTp3L4YeEt9PmzGZISgr-bFJ1DIyA"
 
-def calculate_rsi(series, period=14):
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
 def get_analysis():
     all_data = {}
     for sym, name in SYMBOLS.items():
@@ -32,27 +25,45 @@ def get_analysis():
             df = pd.DataFrame(r.json())
             df.columns = ['d', 'open', 'high', 'low', 'close', 'volume']
             
-            # Calcul RSI maison
-            df['RSI'] = calculate_rsi(df['close'])
+            # --- INDICATEURS ---
+            # RSI
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            df['RSI'] = 100 - (100 / (1 + (gain / loss)))
             
-            # Calcul Bollinger maison
+            # Bollinger
             sma = df['close'].rolling(window=20).mean()
             std = df['close'].rolling(window=20).std()
             df['UB'] = sma + (std * 2)
             df['LB'] = sma - (std * 2)
 
+            # --- DETECTION DE FIGURES (BOUGIES) ---
             last = df.iloc[-1]
-            rsi_val = last['RSI']
+            prev = df.iloc[-2]
+            body = abs(last['close'] - last['open'])
+            prev_body = abs(prev['close'] - prev['open'])
+            range_t = last['high'] - last['low']
             
-            # Signal simple
-            signal = "Neutre"
+            fig = "Standard"
+            if range_t > 0 and body / range_t < 0.1: fig = "Doji"
+            elif (last['high'] - max(last['open'], last['close'])) < body * 0.1 and (min(last['open'], last['close']) - last['low']) > body * 2: fig = "Marteau"
+            elif last['close'] > prev['open'] and last['open'] < prev['close'] and body > prev_body: fig = "Englobante Haussière"
+
+            # --- SIGNAL & DECISION ---
+            rsi_v = last['RSI']
+            decision = "ATTENTE"
             color = "#bdc3c7"
-            if rsi_val < 30:
-                signal = "ACHAT (Survente)"
+            
+            if rsi_v < 35:
+                decision = "ACHAT FORT (Survente + RSI bas)"
                 color = "#26a69a"
-            elif rsi_val > 70:
-                signal = "VENTE (Surachat)"
+            elif rsi_v > 65:
+                decision = "VENTE FORTE (Surachat + RSI haut)"
                 color = "#ef5350"
+            elif last['close'] < last['LB']:
+                decision = "ACHAT (Sortie Bollinger Basse)"
+                color = "#2ecc71"
 
             chart_data = []
             for i, row in df.iterrows():
@@ -65,13 +76,14 @@ def get_analysis():
             all_data[sym] = {
                 "name": name,
                 "candles": chart_data,
-                "rsi": round(float(rsi_val), 2) if pd.notnull(rsi_val) else "N/A",
-                "signal": signal,
+                "rsi": round(float(rsi_v), 2) if pd.notnull(rsi_v) else "N/A",
+                "bb_up": round(float(last['UB']), 2),
+                "bb_low": round(float(last['LB']), 2),
+                "figure": fig,
+                "decision": decision,
                 "color": color
             }
-            print(f"✓ {sym} OK")
-        except Exception as e:
-            print(f"Erreur {sym}: {e}")
+        except: continue
 
     with open('data.json', 'w') as f:
         json.dump(all_data, f)
