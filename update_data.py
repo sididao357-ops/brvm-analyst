@@ -16,77 +16,61 @@ SYMBOLS = {
 
 GUID = "Bs6Jz65CExmMWlmTp3L4YeEt9PmzGZISgr-bFJ1DIyA"
 
-def get_analysis():
-    all_data = {}
+def fetch_and_analyze():
+    all_results = {}
     for sym, name in SYMBOLS.items():
         try:
+            # Connexion à Sika Finance
             url = f"https://www.sikafinance.com/api/charting/GetTicksEOD?symbol={sym}&length=365&period=0&guid={GUID}"
-            r = requests.get(url)
-            df = pd.DataFrame(r.json())
+            response = requests.get(url, timeout=10)
+            if response.status_code != 200: continue
+            
+            data = response.json()
+            df = pd.DataFrame(data)
             df.columns = ['d', 'open', 'high', 'low', 'close', 'volume']
             
-            # --- INDICATEURS ---
-            # RSI
+            # --- CALCUL RSI MANUEL ---
             delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            df['RSI'] = 100 - (100 / (1 + (gain / loss)))
+            up = delta.clip(lower=0)
+            down = -1 * delta.clip(upper=0)
+            ema_up = up.ewm(com=13, adjust=False).mean()
+            ema_down = down.ewm(com=13, adjust=False).mean()
+            rs = ema_up / ema_down
+            df['RSI'] = 100 - (100 / (1 + rs))
             
-            # Bollinger
-            sma = df['close'].rolling(window=20).mean()
-            std = df['close'].rolling(window=20).std()
-            df['UB'] = sma + (std * 2)
-            df['LB'] = sma - (std * 2)
+            # --- CALCUL BOLLINGER MANUEL ---
+            df['MA20'] = df['close'].rolling(window=20).mean()
+            df['STD'] = df['close'].rolling(window=20).std()
+            df['UB'] = df['MA20'] + (df['STD'] * 2)
+            df['LB'] = df['MA20'] - (df['STD'] * 2)
 
-            # --- DETECTION DE FIGURES (BOUGIES) ---
             last = df.iloc[-1]
-            prev = df.iloc[-2]
-            body = abs(last['close'] - last['open'])
-            prev_body = abs(prev['close'] - prev['open'])
-            range_t = last['high'] - last['low']
             
-            fig = "Standard"
-            if range_t > 0 and body / range_t < 0.1: fig = "Doji"
-            elif (last['high'] - max(last['open'], last['close'])) < body * 0.1 and (min(last['open'], last['close']) - last['low']) > body * 2: fig = "Marteau"
-            elif last['close'] > prev['open'] and last['open'] < prev['close'] and body > prev_body: fig = "Englobante Haussière"
-
-            # --- SIGNAL & DECISION ---
-            rsi_v = last['RSI']
-            decision = "ATTENTE"
-            color = "#bdc3c7"
-            
-            if rsi_v < 35:
-                decision = "ACHAT FORT (Survente + RSI bas)"
-                color = "#26a69a"
-            elif rsi_v > 65:
-                decision = "VENTE FORTE (Surachat + RSI haut)"
-                color = "#ef5350"
-            elif last['close'] < last['LB']:
-                decision = "ACHAT (Sortie Bollinger Basse)"
-                color = "#2ecc71"
-
-            chart_data = []
-            for i, row in df.iterrows():
-                chart_data.append({
-                    "time": (datetime(1970, 1, 1) + timedelta(days=row['d'])).strftime('%Y-%m-%d'),
-                    "open": float(row['open']), "high": float(row['high']),
-                    "low": float(row['low']), "close": float(row['close'])
+            # Formattage pour Lightweight Charts
+            candles = []
+            for i, r in df.iterrows():
+                date_obj = datetime(1970, 1, 1) + timedelta(days=int(r['d']))
+                candles.append({
+                    "time": date_obj.strftime('%Y-%m-%d'),
+                    "open": float(r['open']), "high": float(r['high']),
+                    "low": float(r['low']), "close": float(r['close'])
                 })
 
-            all_data[sym] = {
+            all_results[sym] = {
                 "name": name,
-                "candles": chart_data,
-                "rsi": round(float(rsi_v), 2) if pd.notnull(rsi_v) else "N/A",
+                "candles": candles,
+                "rsi": round(float(last['RSI']), 2),
                 "bb_up": round(float(last['UB']), 2),
                 "bb_low": round(float(last['LB']), 2),
-                "figure": fig,
-                "decision": decision,
-                "color": color
+                "figure": "Analyse en cours...",
+                "decision": "ACHAT" if last['RSI'] < 30 else "VENTE" if last['RSI'] > 70 else "NEUTRE",
+                "color": "#26a69a" if last['RSI'] < 30 else "#ef5350" if last['RSI'] > 70 else "#6b7280"
             }
-        except: continue
-
+        except Exception as e:
+            print(f"Erreur sur {sym}: {e}")
+            
     with open('data.json', 'w') as f:
-        json.dump(all_data, f)
+        json.dump(all_results, f)
 
 if __name__ == "__main__":
-    get_analysis()
+    fetch_and_analyze()
